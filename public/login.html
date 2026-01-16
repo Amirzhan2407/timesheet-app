@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в Timesheet</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; margin: 0; }
+        .login-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 350px; }
+        h2 { text-align: center; color: #4e46e5; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #4e46e5; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #4338ca; }
+        .switch { text-align: center; margin-top: 15px; font-size: 0.9rem; color: #666; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="login-card">
+    <h2 id="form-title">Вход в систему</h2>
+    <form id="auth-form">
+        <!-- Поле имени (только для регистрации) -->
+        <input type="text" id="full_name" placeholder="Полное имя" style="display: none;">
+        
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Пароль" required>
+        
+        <button type="submit" id="submit-btn">Войти</button>
+    </form>
+    <div class="switch" id="toggle-auth">Нет аккаунта? Зарегистрироваться</div>
+</div>
+
+<script>
+    const form = document.getElementById('auth-form');
+    const title = document.getElementById('form-title');
+    const submitBtn = document.getElementById('submit-btn');
+    const toggleAuth = document.getElementById('toggle-auth');
+    const nameInput = document.getElementById('full_name');
+
+    let isLogin = true;
+
+    // Переключение между Входом и Регистрацией
+    toggleAuth.onclick = () => {
+        isLogin = !isLogin;
+        title.innerText = isLogin ? "Вход в систему" : "Регистрация";
+        submitBtn.innerText = isLogin ? "Войти" : "Создать аккаунт";
+        toggleAuth.innerText = isLogin ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти";
+        nameInput.style.display = isLogin ? "none" : "block";
+    };
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        
+        const path = isLogin ? '/api/auth/login' : '/api/auth/register';
+        const body = {
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+        };
+        
+        if (!isLogin) body.full_name = nameInput.value;
+
+        const response = await fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(isLogin ? "Успешный вход!" : "Регистрация прошла успешно! Теперь войдите.");
+            if (isLogin) {
+                // Сохраняем токен, чтобы система нас "помнила"
+                localStorage.setItem('token', result.token);
+                localStorage.setItem('user', JSON.stringify(result.user));
+                window.location.href = '/index.html'; // Переходим на главную
+            } else {
+                toggleAuth.click(); // Переключаем на форму входа
+            }
+        } else {
+            alert("Ошибка: " + result.error);
+        }
+    };
+</script>
+
+</body>
+</html>
