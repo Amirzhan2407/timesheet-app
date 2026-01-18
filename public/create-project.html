@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Создание проекта - WorkTime</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: #f0f2f5; padding: 50px; font-family: 'Inter', sans-serif; }
+        .wizard-card { background: white; max-width: 700px; margin: 0 auto; padding: 40px; border-radius: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
+        .step-header { color: #5b46e5; font-weight: 800; border-bottom: 2px solid #f8f9fa; padding-bottom: 15px; margin-bottom: 30px; }
+        .employee-box { background: #f8f9fa; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<div class="wizard-card">
+    <!-- ШАГ 1 -->
+    <div id="step-1">
+        <h3 class="step-header">1. Название проекта</h3>
+        <p class="text-secondary">Придумайте имя для нового проекта:</p>
+        <input type="text" id="project-name" class="form-control form-control-lg mb-4" placeholder="Напр: Разработка сайта">
+        <div class="d-flex justify-content-end">
+            <button class="btn btn-primary btn-lg px-5" onclick="startProject()">Далее →</button>
+        </div>
+    </div>
+
+    <!-- ШАГ 2 -->
+    <div id="step-2" style="display: none;">
+        <h3 class="step-header">2. Команда и Задачи</h3>
+        <p class="mb-4 text-secondary">Проект: <strong id="current-p-name" class="text-dark"></strong></p>
+        
+        <div class="card p-3 mb-4 bg-light border-0">
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="small fw-bold">Категория</label>
+                    <select id="t-category" class="form-select">
+                        <option value="Проектировщик">Проектировщик</option>
+                        <option value="Дизайнер">Дизайнер</option>
+                        <option value="Разработчик">Разработчик</option>
+                        <option value="Тестировщик">Тестировщик</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="small fw-bold">Исполнитель</label>
+                    <select id="t-employee" class="form-select">
+                        <option value="">Загрузка списка сотрудников...</option>
+                    </select>
+                </div>
+                <div class="col-12 mt-2">
+                    <label class="small fw-bold">Комментарий/ТЗ</label>
+                    <textarea id="t-desc" class="form-control" rows="2" placeholder="Что нужно сделать на этом этапе?"></textarea>
+                </div>
+            </div>
+            <button class="btn btn-success mt-3" onclick="addTask()">Добавить задачу в проект</button>
+        </div>
+
+        <h6>Список задач проекта:</h6>
+        <div id="task-list-display" class="mb-4"></div>
+
+        <div class="d-flex justify-content-between pt-3 border-top">
+            <button class="btn btn-link text-secondary" onclick="location.href='/index.html'">Отмена</button>
+            <button class="btn btn-primary px-5" onclick="location.href='/index.html'">Завершить создание</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Получаем данные текущего пользователя (Админа)
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) window.location.href = '/login.html';
+
+    let activeProjectId = null;
+
+    async function startProject() {
+        const name = document.getElementById('project-name').value;
+        if(!name) return alert("Введите название!");
+
+        const res = await fetch('/api/projects', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name })
+        });
+
+        if (res.ok) {
+            const project = await res.json();
+            activeProjectId = project.id;
+            
+            // ПЕРЕКЛЮЧЕНИЕ ШАГА
+            document.getElementById('step-1').style.display = 'none';
+            document.getElementById('step-2').style.display = 'block';
+            document.getElementById('current-p-name').innerText = name;
+            
+            loadEmployees();
+        } else {
+            alert("Ошибка при создании проекта");
+        }
+    }
+
+    // Обновленная функция загрузки сотрудников с исключением Админа
+    async function loadEmployees() {
+        try {
+            // Отправляем ID админа на сервер, чтобы он не попал в список
+            const res = await fetch(`/api/tasks/employees/${user.id}`);
+            const data = await res.json();
+            const sel = document.getElementById('t-employee');
+            
+            if (data.length === 0) {
+                sel.innerHTML = '<option value="">Нет доступных исполнителей</option>';
+            } else {
+                sel.innerHTML = data.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('');
+            }
+        } catch (err) {
+            console.error("Ошибка загрузки списка:", err);
+        }
+    }
+
+    async function addTask() {
+        const body = {
+            project_id: activeProjectId,
+            assigned_to: document.getElementById('t-employee').value,
+            category: document.getElementById('t-category').value,
+            description: document.getElementById('t-desc').value
+        };
+
+        if (!body.assigned_to) return alert("Выберите исполнителя!");
+
+        const res = await fetch('/api/tasks/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+            const empName = document.getElementById('t-employee').options[document.getElementById('t-employee').selectedIndex].text;
+            const display = document.getElementById('task-list-display');
+            display.innerHTML += `
+                <div class="employee-box">
+                    <span class="badge bg-primary">${body.category}</span> <strong>${empName}</strong>
+                    <div class="small text-secondary mt-1">${body.description || 'Без описания'}</div>
+                </div>
+            `;
+            document.getElementById('t-desc').value = '';
+        }
+    }
+</script>
+</body>
+</html>

@@ -2,24 +2,43 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const supabase = require('./src/db');
-const authRoutes = require('./routes/auth'); // Подключаем логику регистрации/входа
+
+// Подключаем базу данных (из твоего файла src/db.js)
+const supabase = require('./src/db'); 
+
+// Импортируем маршруты (логику API)
+const authRoutes = require('./routes/auth');
+const projectRoutes = require('./routes/projects');
+const taskRoutes = require('./routes/tasks');
+const timeRoutes = require('./routes/time');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// МИДЛВЕРЫ (Настройки сервера)
-app.use(cors()); // Разрешает запросы с разных адресов
-app.use(express.json()); // Позволяет серверу понимать JSON-данные
+// --- НАСТРОЙКИ (Middleware) ---
+app.use(cors()); // Чтобы браузер не блокировал запросы
+app.use(express.json()); // Чтобы сервер понимал JSON данные из форм
 
-// Подключаем маршруты для авторизации
-// Теперь все ссылки из auth.js будут начинаться с /api/auth
-app.use('/api/auth', authRoutes);
+// --- ПОДКЛЮЧЕНИЕ API ---
+// Все эти маршруты будут обрабатывать запросы с фронтенда
+app.use('/api/auth', authRoutes);       // Регистрация и логин
+app.use('/api/projects', projectRoutes); // Создание и получение проектов
+app.use('/api/tasks', taskRoutes);       // Назначение и получение задач
+app.use('/api/time', timeRoutes);        // Сохранение отработанных часов
+app.use('/api/reports', require('./routes/reports'));
 
-// Указываем серверу, где лежат файлы фронтенда (HTML, CSS, JS)
+// --- ОБСЛУЖИВАНИЕ ФРОНТЕНДА (Static Files) ---
+// Эта строка делает все файлы в папке 'public' доступными по ссылке
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Проверочный маршрут (оставим его для контроля связи с базой)
+// Дополнительный маршрут: если пользователь зашел просто на http://localhost:3000/
+// Мы можем автоматически отправить его на главную или страницу логина
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// --- ПРОВЕРОЧНЫЙ МАРШРУТ ---
+// Оставим его для контроля связи с облаком Supabase
 app.get('/test-connection', async (req, res) => {
     try {
         const { data, error } = await supabase.from('roles').select('*');
@@ -27,7 +46,7 @@ app.get('/test-connection', async (req, res) => {
         
         res.json({
             status: "Успех!",
-            message: "Сервер подключился к Supabase",
+            message: "Сервер Node.js видит базу PostgreSQL в Supabase",
             data: data
         });
     } catch (err) {
@@ -38,10 +57,12 @@ app.get('/test-connection', async (req, res) => {
     }
 });
 
-// Запуск сервера
+// --- ЗАПУСК СЕРВЕРА ---
 app.listen(PORT, () => {
-    console.log(`=========================================`);
-    console.log(`🚀 Сервер запущен: http://localhost:${PORT}`);
-    console.log(`🔗 Тест базы: http://localhost:${PORT}/test-connection`);
-    console.log(`=========================================`);
+    console.log(`=================================================`);
+    console.log(`🚀 СИСТЕМА TIMESHEET ЗАПУЩЕНА`);
+    console.log(`🏠 Адрес входа: http://localhost:${PORT}/login.html`);
+    console.log(`📊 Дашборд: http://localhost:${PORT}/index.html`);
+    console.log(`🔧 Тест базы: http://localhost:${PORT}/test-connection`);
+    console.log(`=================================================`);
 });

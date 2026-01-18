@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>WorkTime - Панель управления</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        :root { --main-purple: #5b46e5; --done-green: #28a745; }
+        body { background: #f4f7fe; font-family: 'Inter', sans-serif; display: flex; height: 100vh; margin: 0; }
+        
+        /* Боковая панель */
+        .sidebar { width: 260px; background: var(--main-purple); color: white; padding: 30px; position: fixed; height: 100vh; }
+        .nav-link { color: rgba(255,255,255,0.7); padding: 12px; border-radius: 10px; text-decoration: none; display: block; transition: 0.3s; }
+        .nav-link:hover { background: rgba(255,255,255,0.1); color: white; }
+        .nav-link.active { background: rgba(255,255,255,0.2); color: white; font-weight: bold; }
+        
+        .main-content { margin-left: 260px; flex: 1; padding: 40px; overflow-y: auto; }
+        .card-custom { background: white; border-radius: 20px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); margin-bottom: 25px; border: none; }
+        
+        /* WB Tracker с именами */
+        .tracker { display: flex; justify-content: space-between; margin: 30px 0; position: relative; }
+        .tracker::before { content: ''; position: absolute; top: 11px; left: 10%; right: 10%; height: 2px; background: #eee; z-index: 1; }
+        .t-step { z-index: 2; text-align: center; width: 25%; opacity: 0.4; transition: 0.4s; }
+        .t-step.done { opacity: 1; }
+        .t-step.active { opacity: 1; font-weight: bold; color: var(--main-purple); }
+        .t-dot { width: 22px; height: 22px; background: white; border: 3px solid #eee; border-radius: 50%; margin: 0 auto 5px; }
+        .t-step.active .t-dot { border-color: var(--main-purple); background: var(--main-purple); box-shadow: 0 0 10px rgba(91,70,229,0.4); }
+        .t-step.done .t-dot { background: var(--done-green); border-color: var(--done-green); }
+        .t-label { font-size: 10px; text-transform: uppercase; color: #666; margin-bottom: 2px; }
+        .t-name { font-size: 10px; color: var(--main-purple); font-weight: 600; }
+
+        .btn-action { border-radius: 12px; font-weight: bold; padding: 10px 25px; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h3 class="mb-5">WorkTime</h3>
+    <div id="u-profile" class="mb-5">
+        <div id="u-name" class="fw-bold">...</div>
+        <div id="u-role" class="small opacity-50">...</div>
+    </div>
+    
+    <nav class="nav flex-column gap-2">
+        <a class="nav-link active" href="/index.html">📋 Задачи</a>
+        <!-- ВКЛАДКА ОТЧЕТЫ ТЕПЕРЬ ТУТ -->
+        <a class="nav-link" id="nav-reports" href="/report.html">📊 Отчеты</a>
+        
+        <button id="admin-del-btn" class="btn btn-outline-danger btn-sm mt-4" style="display:none;" onclick="openDeleteModal()">🗑 Удалить проект</button>
+        
+        <a class="nav-link text-white-50 mt-5" href="#" onclick="logout()">🚪 Выход</a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 id="page-title">Мои задачи</h2>
+        <button id="main-action-btn" class="btn btn-primary btn-action"></button>
+    </div>
+    
+    <div id="container">
+        <div class="text-center mt-5 text-secondary">Загрузка проектов...</div>
+    </div>
+</div>
+
+<!-- Модалка удаления -->
+<div class="modal fade" id="delModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content" style="border-radius:20px;"><div class="modal-header"><h5>Удалить проект</h5></div><div class="modal-body"><select id="del-select" class="form-select"></select></div><div class="modal-footer"><button class="btn btn-danger" onclick="confirmDelete()">Удалить навсегда</button></div></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (!user) window.location.href = '/login.html';
+
+    const stages = ['Проектировщик', 'Дизайнер', 'Разработчик', 'Тестировщик'];
+
+    // Настройка интерфейса под роль
+    document.getElementById('u-name').innerText = user.full_name;
+    document.getElementById('u-role').innerText = user.role === 'admin' ? 'Администратор' : 'Сотрудник';
+
+    const actionBtn = document.getElementById('main-action-btn');
+    if (user.role === 'admin') {
+        actionBtn.innerText = "+ Создать проект";
+        actionBtn.onclick = () => window.location.href = '/create-project.html';
+        document.getElementById('admin-del-btn').style.display = 'block';
+        document.getElementById('page-title').innerText = "Все проекты компании";
+    } else {
+        actionBtn.innerText = "+ Добавить часы";
+        actionBtn.onclick = () => window.location.href = '/add-time.html';
+        // Сотрудникам отчеты обычно не нужны, можем скрыть или оставить
+    }
+
+    async function loadData() {
+        const container = document.getElementById('container');
+        
+        // 1. Загружаем проекты
+        const resP = await fetch('/api/projects');
+        const projects = await resP.json();
+
+        // 2. Загружаем ВСЕ задачи, чтобы достать имена исполнителей
+        const resT = await fetch('/api/tasks/all');
+        const allTasks = await resT.json();
+
+        if (projects.length === 0) {
+            container.innerHTML = '<div class="text-center mt-5">Нет активных проектов</div>';
+            return;
+        }
+
+        container.innerHTML = projects.map(p => {
+            const curIdx = stages.indexOf(p.current_stage);
+            
+            // Проверяем, есть ли у текущего пользователя задача в этом проекте
+            const myTask = allTasks.find(t => t.project_id === p.id && t.assigned_to === user.id);
+            const isMyTurn = myTask && (myTask.category === p.current_stage);
+
+            return `
+                <div class="card-custom">
+                    <div class="d-flex justify-content-between">
+                        <h4>Проект: ${p.name}</h4>
+                        <span class="badge ${p.current_stage === 'Завершено' ? 'bg-success' : 'bg-primary'}">${p.current_stage}</span>
+                    </div>
+
+                    <div class="tracker">
+                        ${stages.map((s, idx) => {
+                            // Ищем, кто назначен на этот этап в этом проекте
+                            const taskForStep = allTasks.find(t => t.project_id === p.id && t.category === s);
+                            const workerName = taskForStep ? taskForStep.users.full_name : "—";
+
+                            return `
+                                <div class="t-step ${idx < curIdx ? 'done' : (idx === curIdx ? 'active' : '')}">
+                                    <div class="t-label">${s}</div>
+                                    <div class="t-dot"></div>
+                                    <div class="t-name">${workerName}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        ${isMyTurn ? `<button class="btn btn-success" onclick="moveNext(${p.id}, '${p.current_stage}')">✅ Этап готов (Передать дальше)</button>` : ''}
+                        <button class="btn btn-outline-primary btn-sm" onclick="location.href='/add-time.html'">Записать время</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function moveNext(id, stage) {
+        if (!confirm(`Вы завершили этап "${stage}"?`)) return;
+        await fetch(`/api/projects/next-stage/${id}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ current_stage: stage })
+        });
+        loadData();
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('delModal'));
+    async function openDeleteModal() {
+        const res = await fetch('/api/projects');
+        const projs = await res.json();
+        document.getElementById('del-select').innerHTML = projs.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        modal.show();
+    }
+
+    async function confirmDelete() {
+        const id = document.getElementById('del-select').value;
+        await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+        modal.hide();
+        loadData();
+    }
+
+    function logout() { localStorage.clear(); window.location.href = '/login.html'; }
+    loadData();
+</script>
+</body>
+</html>

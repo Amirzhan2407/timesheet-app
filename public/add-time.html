@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>WorkTime - Учет времени</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: #f4f7fe; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .form-card { background: white; width: 100%; max-width: 600px; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        label { font-weight: bold; color: #555; margin-bottom: 8px; display: block; }
+        .form-control, .form-select { border-radius: 10px; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+<div class="form-card">
+    <h3 class="mb-4">Учет рабочего времени</h3>
+    <form id="time-form">
+        <div class="row">
+            <div class="col-md-7">
+                <label>Проект</label>
+                <select id="p-select" class="form-select" required onchange="loadUserTasks(this.value)">
+                    <option value="">Выберите проект...</option>
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label>Дата</label>
+                <input type="date" id="work_date" class="form-control" required>
+            </div>
+        </div>
+
+        <label>Ваша роль в проекте (Задача)</label>
+        <select id="t-select" class="form-select" required>
+            <option value="">Сначала выберите проект...</option>
+        </select>
+
+        <label>Кол-во часов (например: 6.5)</label>
+        <input type="number" step="0.5" id="hours" class="form-control" placeholder="0.0" required>
+
+        <label>Что именно сделано? (Комментарий)</label>
+        <textarea id="comment" class="form-control" rows="3" placeholder="Описание работ..."></textarea>
+
+        <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-light px-4" onclick="history.back()">Отмена</button>
+            <button type="submit" class="btn btn-primary px-4">Сохранить</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    const user = JSON.parse(localStorage.getItem('user'));
+
+    async function init() {
+        const res = await fetch('/api/projects');
+        const projs = await res.json();
+        const sel = document.getElementById('p-select');
+        projs.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.name}</option>`);
+        document.getElementById('work_date').valueAsDate = new Date();
+    }
+
+    async function loadUserTasks(projectId) {
+        if (!projectId) return;
+        const res = await fetch(`/api/tasks/my/${user.id}`);
+        const tasks = await res.json();
+        const sel = document.getElementById('t-select');
+        
+        const myTasks = tasks.filter(t => t.project_id == projectId);
+        sel.innerHTML = myTasks.length ? 
+            myTasks.map(t => `<option value="${t.id}">${t.category}</option>`).join('') :
+            '<option value="">У вас нет задач в этом проекте</option>';
+    }
+
+    document.getElementById('time-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const body = {
+            user_id: user.id,
+            task_id: document.getElementById('t-select').value,
+            work_date: document.getElementById('work_date').value,
+            hours_spent: document.getElementById('hours').value,
+            comment: document.getElementById('comment').value
+        };
+
+        const res = await fetch('/api/time/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+            alert("Время успешно записано!");
+            window.location.href = '/index.html';
+        }
+    };
+
+    init();
+</script>
+</body>
+</html>

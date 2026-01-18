@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>WorkTime - Отчетность</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        :root { --main-purple: #5b46e5; }
+        body { background: #f4f7fe; font-family: 'Inter', sans-serif; display: flex; }
+        .sidebar { width: 260px; background: var(--main-purple); color: white; padding: 30px; position: fixed; height: 100vh; }
+        .main-content { margin-left: 260px; flex: 1; padding: 40px; }
+        .report-card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .stat-box { background: #f8faff; border-radius: 15px; padding: 20px; text-align: center; border: 1px solid #eef2ff; }
+        .stat-value { font-size: 24px; font-weight: 800; color: var(--main-purple); }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h3>WorkTime</h3>
+    <nav class="nav flex-column mt-5">
+        <a class="nav-link text-white-50" href="/index.html">📋 Задачи</a>
+        <a class="nav-link text-white fw-bold" href="/report.html">📊 Отчеты</a>
+        <a class="nav-link text-white-50 mt-5" href="/login.html">🚪 Выход</a>
+    </nav>
+</div>
+
+<div class="main-content">
+    <h2 class="mb-4">Аналитика по проектам</h2>
+    
+    <div class="card p-4 border-0 shadow-sm mb-4" style="border-radius: 20px;">
+        <label class="fw-bold mb-2">Выберите проект для анализа:</label>
+        <select id="project-selector" class="form-select" onchange="loadProjectReport(this.value)">
+            <option value="">Выберите проект...</option>
+        </select>
+    </div>
+
+    <div id="report-view" style="display: none;">
+        <div class="report-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 id="rep-project-name">Название проекта</h3>
+                <span class="badge bg-primary px-3" id="rep-period">даты</span>
+            </div>
+
+            <div class="row mb-5">
+                <div class="col-md-6">
+                    <div class="stat-box">
+                        <div class="text-secondary small">ОБЩЕЕ ВРЕМЯ</div>
+                        <div class="stat-value" id="rep-total-hours">0 ч.</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="stat-box">
+                        <div class="text-secondary small">СРЕДНЕЕ НА ЧЕЛОВЕКА</div>
+                        <div class="stat-value" id="rep-avg-hours">0 ч.</div>
+                    </div>
+                </div>
+            </div>
+
+            <h5>Распределение времени по сотрудникам:</h5>
+            <div id="employee-breakdown" class="mb-5"></div>
+
+            <h5>История работ (комментарии):</h5>
+            <table class="table small">
+                <thead><tr><th>Дата</th><th>Кто</th><th>Этап</th><th>Часы</th><th>Что сделано</th></tr></thead>
+                <tbody id="logs-table"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="no-data" class="text-center mt-5 text-secondary" style="display: none;">
+        По этому проекту еще нет записей о времени.
+    </div>
+</div>
+
+<script>
+    async function init() {
+        const res = await fetch('/api/projects');
+        const projs = await res.json();
+        const sel = document.getElementById('project-selector');
+        projs.forEach(p => sel.innerHTML += `<option value="${p.id}">${p.name}</option>`);
+    }
+
+    async function loadProjectReport(id) {
+        if (!id) return;
+        const res = await fetch(`/api/reports/project/${id}`);
+        const data = await res.json();
+
+        if (data.empty) {
+            document.getElementById('report-view').style.display = 'none';
+            document.getElementById('no-data').style.display = 'block';
+            return;
+        }
+
+        document.getElementById('report-view').style.display = 'block';
+        document.getElementById('no-data').style.display = 'none';
+
+        document.getElementById('rep-project-name').innerText = data.projectName;
+        document.getElementById('rep-period').innerText = data.period;
+        document.getElementById('rep-total-hours').innerText = data.totalHours + " ч.";
+        document.getElementById('rep-avg-hours').innerText = data.averageHours + " ч.";
+
+        // Список сотрудников
+        const breakdown = document.getElementById('employee-breakdown');
+        breakdown.innerHTML = data.employeeList.map(e => `
+            <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                <span><b>${e.name}</b></span>
+                <span class="badge bg-secondary">${e.hours} ч.</span>
+            </div>
+        `).join('');
+
+        // Таблица логов
+        const table = document.getElementById('logs-table');
+        table.innerHTML = data.details.map(l => `
+            <tr>
+                <td>${new Date(l.work_date).toLocaleDateString()}</td>
+                <td>${l.users.full_name}</td>
+                <td><span class="badge bg-light text-dark">${l.tasks.category}</span></td>
+                <td>${l.hours_spent}</td>
+                <td class="text-muted">${l.comment || '-'}</td>
+            </tr>
+        `).join('');
+    }
+
+    init();
+</script>
+</body>
+</html>
